@@ -1,0 +1,626 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>ShellPort</title>
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+  <link rel="stylesheet" href="/xterm/css/xterm.css">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    :root {
+      --bg: #0d1117;
+      --surface: #161b22;
+      --border: #30363d;
+      --text: #e6edf3;
+      --text-dim: #8b949e;
+      --accent: #58a6ff;
+      --danger: #f85149;
+      --success: #3fb950;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    /* 顶部栏 */
+    .header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 8px 12px;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      min-height: 44px;
+      flex-shrink: 0;
+    }
+
+    .header h1 {
+      font-size: 16px;
+      font-weight: 600;
+      color: var(--accent);
+    }
+
+    .header .status {
+      font-size: 12px;
+      color: var(--text-dim);
+    }
+
+    .header .status .dot {
+      display: inline-block;
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      margin-right: 4px;
+      vertical-align: middle;
+    }
+
+    .header .status .dot.connected { background: var(--success); }
+    .header .status .dot.disconnected { background: var(--danger); }
+
+    /* Tab 栏 */
+    .tabs-bar {
+      display: flex;
+      align-items: center;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      overflow-x: auto;
+      flex-shrink: 0;
+      -webkit-overflow-scrolling: touch;
+    }
+
+    .tabs-bar::-webkit-scrollbar { height: 0; }
+
+    .tab {
+      display: flex;
+      align-items: center;
+      padding: 6px 12px;
+      font-size: 13px;
+      color: var(--text-dim);
+      cursor: pointer;
+      white-space: nowrap;
+      border-bottom: 2px solid transparent;
+      transition: all 0.15s;
+      flex-shrink: 0;
+    }
+
+    .tab:hover { color: var(--text); background: rgba(255,255,255,0.04); }
+    .tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+    .tab .close-btn {
+      margin-left: 6px;
+      width: 16px;
+      height: 16px;
+      border-radius: 3px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 14px;
+      line-height: 1;
+      color: var(--text-dim);
+    }
+
+    .tab .close-btn:hover { background: rgba(248,81,73,0.2); color: var(--danger); }
+
+    .tab-add {
+      padding: 6px 10px;
+      font-size: 18px;
+      color: var(--text-dim);
+      cursor: pointer;
+      flex-shrink: 0;
+    }
+
+    .tab-add:hover { color: var(--accent); }
+
+    /* 终端区域 */
+    .terminal-container {
+      flex: 1;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .terminal-wrapper {
+      position: absolute;
+      top: 0; left: 0; right: 0; bottom: 0;
+      display: none;
+    }
+
+    .terminal-wrapper.active {
+      display: block;
+    }
+
+    .terminal-wrapper .xterm {
+      height: 100%;
+    }
+
+    /* 空状态 */
+    .empty-state {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100%;
+      color: var(--text-dim);
+    }
+
+    .empty-state .icon { font-size: 48px; margin-bottom: 16px; }
+    .empty-state p { font-size: 14px; margin-bottom: 16px; }
+
+    .empty-state button,
+    .btn {
+      padding: 8px 16px;
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      border-radius: 6px;
+      font-size: 14px;
+      cursor: pointer;
+    }
+
+    .empty-state button:hover,
+    .btn:hover { opacity: 0.85; }
+
+    /* 底部工具栏 */
+    .mobile-toolbar {
+      display: flex;
+      flex-shrink: 0;
+      padding: 4px 8px;
+      background: var(--surface);
+      border-top: 1px solid var(--border);
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+      gap: 4px;
+    }
+
+    .mobile-toolbar::-webkit-scrollbar { height: 0; }
+
+    .mobile-toolbar button {
+      padding: 6px 10px;
+      background: var(--border);
+      color: var(--text);
+      border: none;
+      border-radius: 4px;
+      font-size: 13px;
+      font-family: monospace;
+      cursor: pointer;
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+
+    .mobile-toolbar button:active { background: var(--accent); }
+    .mobile-toolbar button.kb-on { background: var(--accent); color: #fff; }
+
+    /* 重连提示 */
+    .reconnect-banner {
+      display: none;
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 24px;
+      text-align: center;
+      z-index: 100;
+    }
+
+    .reconnect-banner p { margin-bottom: 12px; }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>ShellPort</h1>
+    <div class="status">
+      <span class="dot disconnected" id="statusDot"></span>
+      <span id="statusText">connecting...</span>
+    </div>
+  </div>
+
+  <div class="tabs-bar" id="tabsBar">
+    <div class="tab-add" id="addTab" title="New Terminal">+</div>
+  </div>
+
+  <div class="terminal-container" id="terminalContainer">
+    <div class="empty-state" id="emptyState">
+      <div class="icon">></div>
+      <p>No terminal open</p>
+      <button onclick="createNewSession()">New Terminal</button>
+    </div>
+  </div>
+
+  <!-- 手机端快捷键栏 -->
+  <div class="mobile-toolbar" id="mobileToolbar">
+    <button id="kbToggle">KEYBOARD</button>
+    <button data-key="Enter">Enter</button>
+    <button data-key="Tab">Tab</button>
+    <button data-key="ArrowUp">&uarr;</button>
+    <button data-key="ArrowDown">&darr;</button>
+    <button data-key="ArrowLeft">&larr;</button>
+    <button data-key="ArrowRight">&rarr;</button>
+    <button data-key="Escape">Esc</button>
+    <button data-ctrl="c">^C</button>
+    <button data-ctrl="d">^D</button>
+    <button data-ctrl="l">^L</button>
+    <button data-ctrl="z">^Z</button>
+    <button data-ctrl="a">^A</button>
+    <button data-ctrl="e">^E</button>
+    <button data-ctrl="r">^R</button>
+  </div>
+
+  <div class="reconnect-banner" id="reconnectBanner">
+    <p>Connection lost</p>
+    <button class="btn" onclick="connectWebSocket()">Reconnect</button>
+  </div>
+
+  <script src="/xterm/lib/xterm.js"></script>
+  <script src="/xterm-addon-fit/lib/addon-fit.js"></script>
+  <script src="/xterm-addon-web-links/lib/addon-web-links.js"></script>
+  <script>
+    // --- State ---
+    let ws = null;
+    let activeSessionId = null;
+    const terminals = new Map(); // sessionId → { term, fitAddon, wrapper }
+    const isMobile = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+    let keyboardOpen = false;
+
+    // --- WebSocket ---
+    function connectWebSocket() {
+      if (ws && ws.readyState === WebSocket.OPEN) return;
+
+      const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+      ws = new WebSocket(`${proto}://${location.host}`);
+
+      ws.onopen = () => {
+        setStatus(true);
+        document.getElementById('reconnectBanner').style.display = 'none';
+        // 重新获取 session 列表
+        fetch('/api/sessions')
+          .then(r => r.json())
+          .then(list => {
+            if (list.length === 0) return;
+            // 恢复 tabs
+            list.forEach(s => {
+              if (!terminals.has(s.id)) {
+                addTab(s.id, s.name);
+                createTerminal(s.id);
+              }
+            });
+            // attach 到第一个
+            if (!activeSessionId && list.length > 0) {
+              switchTo(list[0].id);
+            } else if (activeSessionId) {
+              attachSession(activeSessionId);
+            }
+          });
+      };
+
+      ws.onmessage = (event) => {
+        const msg = JSON.parse(event.data);
+        switch (msg.type) {
+          case 'output': {
+            const sid = msg.sessionId || activeSessionId;
+            const t = terminals.get(sid);
+            if (t) t.term.write(msg.data);
+            break;
+          }
+          case 'created': {
+            addTab(msg.sessionId, msg.name);
+            createTerminal(msg.sessionId);
+            switchTo(msg.sessionId);
+            break;
+          }
+          case 'attached': {
+            // already handled
+            break;
+          }
+          case 'sessions': {
+            // 更新 tab 列表（处理其他客户端的变更）
+            syncTabs(msg.list);
+            break;
+          }
+          case 'exit': {
+            removeSession(msg.sessionId);
+            break;
+          }
+          case 'error': {
+            console.error('Server error:', msg.message);
+            break;
+          }
+        }
+      };
+
+      ws.onclose = () => {
+        setStatus(false);
+        document.getElementById('reconnectBanner').style.display = 'block';
+      };
+
+      ws.onerror = () => {
+        ws.close();
+      };
+    }
+
+    function send(msg) {
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify(msg));
+      }
+    }
+
+    // --- Status ---
+    function setStatus(connected) {
+      const dot = document.getElementById('statusDot');
+      const text = document.getElementById('statusText');
+      dot.className = 'dot ' + (connected ? 'connected' : 'disconnected');
+      text.textContent = connected ? 'connected' : 'disconnected';
+    }
+
+    // --- Terminal ---
+    function createTerminal(sessionId) {
+      const container = document.getElementById('terminalContainer');
+      const wrapper = document.createElement('div');
+      wrapper.className = 'terminal-wrapper';
+      wrapper.dataset.session = sessionId;
+      container.appendChild(wrapper);
+
+      const term = new Terminal({
+        cursorBlink: true,
+        fontSize: 14,
+        fontFamily: "'Cascadia Code', 'Consolas', 'Courier New', monospace",
+        theme: {
+          background: '#0d1117',
+          foreground: '#e6edf3',
+          cursor: '#58a6ff',
+          selectionBackground: 'rgba(88,166,255,0.3)',
+          black: '#484f58',
+          red: '#ff7b72',
+          green: '#3fb950',
+          yellow: '#d29922',
+          blue: '#58a6ff',
+          magenta: '#bc8cff',
+          cyan: '#39c5cf',
+          white: '#b1bac4',
+        },
+        allowProposedApi: true,
+      });
+
+      const fitAddon = new FitAddon.FitAddon();
+      const webLinksAddon = new WebLinksAddon.WebLinksAddon();
+      term.loadAddon(fitAddon);
+      term.loadAddon(webLinksAddon);
+      term.open(wrapper);
+
+      // 手机端：默认阻止触摸弹出键盘，让用户能自由滑动
+      if (isMobile) {
+        const textarea = wrapper.querySelector('.xterm-helper-textarea');
+        if (textarea) textarea.setAttribute('readonly', 'readonly');
+      }
+
+      // 延迟 fit 以确保 DOM 渲染完毕
+      requestAnimationFrame(() => {
+        fitAddon.fit();
+      });
+
+      term.onData((data) => {
+        send({ type: 'input', data });
+      });
+
+      term.onResize(({ cols, rows }) => {
+        send({ type: 'resize', cols, rows });
+      });
+
+      terminals.set(sessionId, { term, fitAddon, wrapper });
+    }
+
+    function switchTo(sessionId) {
+      // 隐藏当前
+      for (const [id, t] of terminals) {
+        t.wrapper.classList.remove('active');
+      }
+      // 更新 tab 样式
+      document.querySelectorAll('.tab').forEach(tab => {
+        tab.classList.toggle('active', parseInt(tab.dataset.session) === sessionId);
+      });
+
+      const t = terminals.get(sessionId);
+      if (t) {
+        t.wrapper.classList.add('active');
+        // 手机端：根据键盘状态设置 textarea
+        if (isMobile) {
+          const textarea = t.wrapper.querySelector('.xterm-helper-textarea');
+          if (textarea) {
+            if (keyboardOpen) {
+              textarea.removeAttribute('readonly');
+            } else {
+              textarea.setAttribute('readonly', 'readonly');
+            }
+          }
+        }
+        requestAnimationFrame(() => {
+          t.fitAddon.fit();
+          if (!isMobile || keyboardOpen) t.term.focus();
+        });
+      }
+
+      activeSessionId = sessionId;
+      attachSession(sessionId);
+      updateEmptyState();
+    }
+
+    function attachSession(sessionId) {
+      send({ type: 'attach', sessionId });
+    }
+
+    function createNewSession() {
+      send({ type: 'create' });
+    }
+
+    function removeSession(sessionId) {
+      const t = terminals.get(sessionId);
+      if (t) {
+        t.term.dispose();
+        t.wrapper.remove();
+        terminals.delete(sessionId);
+      }
+      // 移除 tab
+      const tab = document.querySelector(`.tab[data-session="${sessionId}"]`);
+      if (tab) tab.remove();
+
+      // 切换到其他 session
+      if (activeSessionId === sessionId) {
+        activeSessionId = null;
+        const remaining = [...terminals.keys()];
+        if (remaining.length > 0) {
+          switchTo(remaining[remaining.length - 1]);
+        }
+      }
+      updateEmptyState();
+    }
+
+    // --- Tabs ---
+    function addTab(sessionId, name) {
+      const bar = document.getElementById('tabsBar');
+      const addBtn = document.getElementById('addTab');
+
+      const tab = document.createElement('div');
+      tab.className = 'tab';
+      tab.dataset.session = sessionId;
+      tab.innerHTML = `
+        <span class="tab-name">${escapeHtml(name)}</span>
+        <span class="close-btn" title="Close">&times;</span>
+      `;
+
+      tab.querySelector('.tab-name').addEventListener('click', () => switchTo(sessionId));
+      tab.querySelector('.close-btn').addEventListener('click', (e) => {
+        e.stopPropagation();
+        send({ type: 'kill', sessionId });
+        removeSession(sessionId);
+      });
+
+      bar.insertBefore(tab, addBtn);
+      updateEmptyState();
+    }
+
+    function syncTabs(list) {
+      const currentIds = new Set(terminals.keys());
+      const serverIds = new Set(list.map(s => s.id));
+
+      // 移除服务器上已不存在的
+      for (const id of currentIds) {
+        if (!serverIds.has(id)) {
+          removeSession(id);
+        }
+      }
+
+      // 添加服务器上新增的
+      for (const s of list) {
+        if (!currentIds.has(s.id)) {
+          addTab(s.id, s.name);
+          createTerminal(s.id);
+        }
+        // 更新名称
+        const tab = document.querySelector(`.tab[data-session="${s.id}"] .tab-name`);
+        if (tab) tab.textContent = s.name;
+      }
+    }
+
+    function updateEmptyState() {
+      const empty = document.getElementById('emptyState');
+      empty.style.display = terminals.size === 0 ? 'flex' : 'none';
+    }
+
+    function escapeHtml(str) {
+      const d = document.createElement('div');
+      d.textContent = str;
+      return d.innerHTML;
+    }
+
+    // --- Add Tab 按钮 ---
+    document.getElementById('addTab').addEventListener('click', createNewSession);
+
+    // --- 窗口 resize ---
+    window.addEventListener('resize', () => {
+      if (activeSessionId) {
+        const t = terminals.get(activeSessionId);
+        if (t) {
+          t.fitAddon.fit();
+        }
+      }
+    });
+
+    // --- 手机快捷键栏 ---
+    document.getElementById('mobileToolbar').addEventListener('click', (e) => {
+      const btn = e.target.closest('button');
+      if (!btn || btn.id === 'kbToggle') return;
+
+      const key = btn.dataset.key;
+      const ctrl = btn.dataset.ctrl;
+
+      if (ctrl) {
+        // Ctrl+字母 → 发送对应控制字符
+        const code = ctrl.charCodeAt(0) - 96; // a=1, b=2, ...
+        send({ type: 'input', data: String.fromCharCode(code) });
+      } else if (key === 'Enter') {
+        send({ type: 'input', data: '\r' });
+      } else if (key === 'Escape') {
+        send({ type: 'input', data: '\x1b' });
+      } else if (key === 'Tab') {
+        send({ type: 'input', data: '\t' });
+      } else if (key === 'ArrowUp') {
+        send({ type: 'input', data: '\x1b[A' });
+      } else if (key === 'ArrowDown') {
+        send({ type: 'input', data: '\x1b[B' });
+      } else if (key === 'ArrowRight') {
+        send({ type: 'input', data: '\x1b[C' });
+      } else if (key === 'ArrowLeft') {
+        send({ type: 'input', data: '\x1b[D' });
+      }
+
+      // 重新聚焦终端（仅在键盘开启时）
+      if (activeSessionId && keyboardOpen) {
+        const t = terminals.get(activeSessionId);
+        if (t) t.term.focus();
+      }
+    });
+
+    // --- 键盘切换 ---
+    document.getElementById('kbToggle').addEventListener('click', () => {
+      keyboardOpen = !keyboardOpen;
+      document.getElementById('kbToggle').classList.toggle('kb-on', keyboardOpen);
+
+      if (!activeSessionId) return;
+      const t = terminals.get(activeSessionId);
+      if (!t) return;
+      const textarea = t.wrapper.querySelector('.xterm-helper-textarea');
+      if (!textarea) return;
+
+      if (keyboardOpen) {
+        textarea.removeAttribute('readonly');
+        t.term.focus();
+      } else {
+        textarea.setAttribute('readonly', 'readonly');
+        textarea.blur();
+      }
+    });
+
+    // --- 键盘弹出/收起时重新 fit 终端 ---
+    if (window.visualViewport) {
+      window.visualViewport.addEventListener('resize', () => {
+        if (activeSessionId) {
+          const t = terminals.get(activeSessionId);
+          if (t) t.fitAddon.fit();
+        }
+      });
+    }
+
+    // --- 启动 ---
+    connectWebSocket();
+  </script>
+</body>
+</html>
