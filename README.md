@@ -1,6 +1,10 @@
-# ShellPort
+<p align="center">
+  <img src="public/favicon.svg" width="80" height="80" alt="ShellPort">
+</p>
 
-**[English](#english) | [中文](#中文)**
+<h1 align="center">ShellPort</h1>
+
+<p align="center"><b><a href="#english">English</a> | <a href="#中文">中文</a></b></p>
 
 ---
 
@@ -13,8 +17,10 @@ Web-based terminal sharing tool. Run a terminal on your computer, access and con
 - **Multi-device access** -- open the same terminal session from multiple devices simultaneously
 - **Session management** -- create, switch, rename, and close multiple terminal tabs
 - **Scrollback replay** -- new clients joining an existing session see the full output history
-- **Mobile-friendly** -- bottom toolbar with common keys (Enter, Tab, arrows, Ctrl combos) and a keyboard toggle for smooth scrolling
 - **Real-time sync** -- session list updates are broadcast to all connected clients instantly
+
+> [!TIP]
+> **Mobile-friendly** -- bottom toolbar with common keys (Enter, Tab, arrows, Ctrl combos) and a keyboard toggle for smooth scrolling
 
 ### Quick Start
 
@@ -52,8 +58,10 @@ ISC
 - **多设备访问** -- 多个设备可以同时打开并操控同一个终端会话
 - **会话管理** -- 创建、切换、重命名、关闭多个终端标签页
 - **历史回放** -- 新设备加入已有会话时自动回放之前的输出内容
-- **移动端适配** -- 底部工具栏提供常用按键（回车、Tab、方向键、Ctrl 组合键），支持键盘开关以便自由滑动浏览
 - **实时同步** -- 会话列表变更会即时推送给所有已连接的客户端
+
+> [!TIP]
+> **移动端适配** -- 底部工具栏提供常用按键（回车、Tab、方向键、Ctrl 组合键），支持键盘开关以便自由滑动浏览
 
 ### 快速开始
 
