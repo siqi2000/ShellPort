@@ -1,0 +1,24 @@
+@echo off
+REM ShellPort 反向隧道一键开关
+REM 用法: 双击运行就开隧道; 想关就在窗口里按 Ctrl+C 或直接关窗口
+
+REM ====== 服务器信息（用 ~/.ssh/config 里的别名） ======
+set SERVER_ALIAS=myrelay
+set REMOTE_PORT=8080
+set LOCAL_PORT=3000
+REM ======================================================
+
+echo.
+echo  ShellPort Tunnel
+echo  ----------------
+echo  Remote: %SERVER_ALIAS%:%REMOTE_PORT%
+echo  Local:  localhost:%LOCAL_PORT%
+echo.
+echo  Ctrl+C to stop
+echo.
+
+ssh -N -R 0.0.0.0:%REMOTE_PORT%:localhost:%LOCAL_PORT% %SERVER_ALIAS%
+
+echo.
+echo  Tunnel closed.
+pause

@@ -197,6 +197,28 @@
     .mobile-toolbar button:active { background: var(--accent); }
     .mobile-toolbar button.kb-on { background: var(--accent); color: #fff; }
 
+    /* 复制成功提示 */
+    .copy-toast {
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%) scale(0.8);
+      background: rgba(22, 27, 34, 0.9);
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 12px 24px;
+      border-radius: 8px;
+      font-size: 14px;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.2s, transform 0.2s;
+      z-index: 200;
+    }
+    .copy-toast.show {
+      opacity: 1;
+      transform: translate(-50%, -50%) scale(1);
+    }
+
     /* 重连提示 */
     .reconnect-banner {
       display: none;
@@ -217,7 +239,7 @@
 </head>
 <body>
   <div class="header">
-    <h1>ShellPort</h1>
+    <h1>ShellPort <span style="font-size:12px;color:var(--text-dim);font-weight:normal;margin-left:8px;">Alt+C copy | Alt+V paste</span></h1>
     <div class="status">
       <span class="dot disconnected" id="statusDot"></span>
       <span id="statusText">connecting...</span>
@@ -255,6 +277,7 @@
     <button data-ctrl="r">^R</button>
   </div>
 
+  <div class="copy-toast" id="copyToast">Copied!</div>
   <div class="reconnect-banner" id="reconnectBanner">
     <p>Connection lost</p>
     <button class="btn" onclick="connectWebSocket()">Reconnect</button>
@@ -395,6 +418,15 @@
       term.loadAddon(fitAddon);
       term.loadAddon(webLinksAddon);
       term.open(wrapper);
+
+      // Alt+C/V 由全局 handler 处理，这里只阻止 xterm 处理这些键
+      term.attachCustomKeyEventHandler((e) => {
+        if (e.altKey && !e.ctrlKey && !e.shiftKey &&
+            (e.code === 'KeyC' || e.code === 'KeyV')) {
+          return false;
+        }
+        return true;
+      });
 
       // 手机端：默认阻止触摸弹出键盘，让用户能自由滑动
       if (isMobile) {
@@ -618,6 +650,52 @@
         }
       });
     }
+
+    // --- Alt+C 复制 / Alt+V 粘贴（全局，兼容非 HTTPS）---
+    function copyText(text) {
+      // 优先用 Clipboard API，不可用时回退到 execCommand
+      if (navigator.clipboard && window.isSecureContext) {
+        navigator.clipboard.writeText(text).then(showCopyToast);
+        return;
+      }
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      ta.style.cssText = 'position:fixed;left:-9999px';
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand('copy');
+      document.body.removeChild(ta);
+      showCopyToast();
+    }
+
+    let copyToastTimer = null;
+    function showCopyToast() {
+      const toast = document.getElementById('copyToast');
+      toast.classList.add('show');
+      clearTimeout(copyToastTimer);
+      copyToastTimer = setTimeout(() => toast.classList.remove('show'), 1000);
+    }
+
+    document.addEventListener('keydown', (e) => {
+      if (!e.altKey || e.ctrlKey || e.shiftKey) return;
+      if (e.code === 'KeyC') {
+        e.preventDefault();
+        e.stopPropagation();
+        if (!activeSessionId) return;
+        const t = terminals.get(activeSessionId);
+        if (!t) return;
+        const sel = t.term.getSelection();
+        if (sel) copyText(sel);
+      } else if (e.code === 'KeyV') {
+        e.preventDefault();
+        e.stopPropagation();
+        if (navigator.clipboard && window.isSecureContext) {
+          navigator.clipboard.readText().then(text => {
+            if (text) send({ type: 'input', data: text });
+          });
+        }
+      }
+    }, true); // capture phase，确保在 xterm 之前拦截
 
     // --- 启动 ---
     connectWebSocket();
