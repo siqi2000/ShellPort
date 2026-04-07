@@ -28,6 +28,17 @@
 
 Web-based terminal sharing tool. Run a terminal on your home computer, then access and control it from any device — phone, tablet, or another PC — either on the same LAN or **anywhere on the internet** via a cheap relay server.
 
+**Table of contents**
+- [Features](#features)
+- [Quick Start (LAN only)](#quick-start-lan-only)
+- [Remote Access (over the internet)](#remote-access-over-the-internet)
+  - [Setup](#setup)
+  - [Security notes](#security-notes)
+- [Tech Stack](#tech-stack)
+- [How It Works](#how-it-works)
+- [Releases & changelog](#releases--changelog)
+- [License](#license)
+
 ### Features
 
 - **Multi-device access** — open the same terminal session from multiple devices simultaneously
@@ -185,6 +196,17 @@ ISC
 ## 中文
 
 基于 Web 的终端共享工具。在家里的电脑上运行终端，然后从任何设备（手机、平板、另一台电脑）来访问和操控 —— 既支持局域网，也可以**通过一台便宜的中转服务器从公网任意位置访问**。
+
+**目录**
+- [功能特性](#功能特性)
+- [快速开始（仅局域网）](#快速开始仅局域网)
+- [远程访问（公网）](#远程访问公网)
+  - [配置步骤](#配置步骤)
+  - [安全说明](#安全说明)
+- [技术栈](#技术栈)
+- [工作原理](#工作原理)
+- [版本历史](#版本历史)
+- [许可证](#许可证)
 
 ### 功能特性
 
