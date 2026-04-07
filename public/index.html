@@ -219,6 +219,54 @@
       transform: translate(-50%, -50%) scale(1);
     }
 
+    /* 目标选择器 */
+    .target-picker-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.5);
+      z-index: 150;
+      align-items: center;
+      justify-content: center;
+    }
+    .target-picker-overlay.show { display: flex; }
+    .target-picker {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      min-width: 260px;
+      max-width: 90vw;
+      max-height: 80vh;
+      overflow-y: auto;
+      padding: 8px 0;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+    }
+    .target-picker .title {
+      padding: 8px 16px 12px;
+      font-size: 12px;
+      color: var(--text-dim);
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 4px;
+    }
+    .target-item {
+      padding: 10px 16px;
+      font-size: 14px;
+      color: var(--text);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .target-item:hover { background: rgba(88,166,255,0.15); }
+    .target-item .icon {
+      width: 16px;
+      text-align: center;
+      color: var(--text-dim);
+      font-family: monospace;
+    }
+    .target-item.local .icon { color: var(--success); }
+    .target-item.ssh .icon { color: var(--accent); }
+
     /* 重连提示 */
     .reconnect-banner {
       display: none;
@@ -275,6 +323,13 @@
     <button data-ctrl="a">^A</button>
     <button data-ctrl="e">^E</button>
     <button data-ctrl="r">^R</button>
+  </div>
+
+  <!-- 新建会话目标选择器 -->
+  <div class="target-picker-overlay" id="targetPickerOverlay">
+    <div class="target-picker" id="targetPicker">
+      <div class="title">Choose a target</div>
+    </div>
   </div>
 
   <div class="copy-toast" id="copyToast">Copied!</div>
@@ -490,8 +545,48 @@
     }
 
     function createNewSession() {
-      send({ type: 'create' });
+      openTargetPicker();
     }
+
+    // --- Target picker ---
+    async function openTargetPicker() {
+      const overlay = document.getElementById('targetPickerOverlay');
+      const picker = document.getElementById('targetPicker');
+      // 清掉旧条目,保留 title
+      picker.querySelectorAll('.target-item').forEach(el => el.remove());
+
+      let targets;
+      try {
+        targets = await fetch('/api/targets').then(r => r.json());
+      } catch {
+        targets = [{ id: 'local', name: 'Local' }];
+      }
+
+      for (const t of targets) {
+        const item = document.createElement('div');
+        const isLocal = t.id === 'local';
+        item.className = 'target-item ' + (isLocal ? 'local' : 'ssh');
+        item.innerHTML = `
+          <span class="icon">${isLocal ? '>_' : '@'}</span>
+          <span>${escapeHtml(t.name)}</span>
+        `;
+        item.addEventListener('click', () => {
+          closeTargetPicker();
+          send({ type: 'create', target: t.id });
+        });
+        picker.appendChild(item);
+      }
+      overlay.classList.add('show');
+    }
+    function closeTargetPicker() {
+      document.getElementById('targetPickerOverlay').classList.remove('show');
+    }
+    document.getElementById('targetPickerOverlay').addEventListener('click', (e) => {
+      if (e.target.id === 'targetPickerOverlay') closeTargetPicker();
+    });
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') closeTargetPicker();
+    });
 
     function removeSession(sessionId) {
       const t = terminals.get(sessionId);

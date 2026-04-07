@@ -47,6 +47,25 @@ function isAuthed(req) {
 const logsDir = path.join(__dirname, 'logs');
 if (!fs.existsSync(logsDir)) fs.mkdirSync(logsDir);
 
+// 解析 ~/.ssh/config,返回 Host 别名列表(跳过通配符)
+function listSshTargets() {
+  const cfgPath = path.join(os.homedir(), '.ssh', 'config');
+  if (!fs.existsSync(cfgPath)) return [];
+  const targets = [];
+  for (const raw of fs.readFileSync(cfgPath, 'utf8').split(/\r?\n/)) {
+    const line = raw.trim();
+    if (!line || line.startsWith('#')) continue;
+    const m = line.match(/^Host\s+(.+)$/i);
+    if (!m) continue;
+    for (const name of m[1].split(/\s+/)) {
+      if (name && !name.includes('*') && !name.includes('?')) {
+        targets.push(name);
+      }
+    }
+  }
+  return targets;
+}
+
 const app = express();
 const server = http.createServer(app);
 const wss = new WebSocket.Server({
@@ -121,6 +140,16 @@ app.get('/api/sessions', (req, res) => {
   res.json(list);
 });
 
+// API: 获取可用的会话目标(本地 + ~/.ssh/config 里的所有 Host)
+app.get('/api/targets', (req, res) => {
+  const localName = process.platform === 'win32' ? 'Local PowerShell' : 'Local Shell';
+  const list = [{ id: 'local', name: localName }];
+  for (const t of listSshTargets()) {
+    list.push({ id: t, name: t });
+  }
+  res.json(list);
+});
+
 // 获取本机局域网 IP
 function getLocalIP() {
   const interfaces = os.networkInterfaces();
@@ -135,18 +164,42 @@ function getLocalIP() {
 }
 
 // 创建新的终端 session
-function createSession(name) {
+// target: 'local'(默认) 或 ~/.ssh/config 里的 Host 别名
+function createSession(name, target) {
   const id = nextSessionId++;
-  const shell = process.platform === 'win32' ? 'powershell.exe' : 'bash';
-  const ptyProcess = pty.spawn(shell, [], {
-    name: 'xterm-color',
-    cols: 80,
-    rows: 24,
-    cwd: os.homedir(),
-    env: process.env,
-  });
+  const isLocal = !target || target === 'local';
 
-  const sessionName = name || `PowerShell ${id}`;
+  let cmd, args;
+  if (isLocal) {
+    cmd = process.platform === 'win32' ? 'powershell.exe' : 'bash';
+    args = [];
+  } else {
+    // ssh 别名,直接用 ~/.ssh/config 里的配置
+    cmd = process.platform === 'win32'
+      ? path.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'OpenSSH', 'ssh.exe')
+      : 'ssh';
+    // -tt 强制分配伪终端,避免远端不开 PTY 导致输入不响应
+    args = ['-tt', target];
+  }
+
+  let ptyProcess;
+  try {
+    ptyProcess = pty.spawn(cmd, args, {
+      name: 'xterm-color',
+      cols: 80,
+      rows: 24,
+      cwd: os.homedir(),
+      env: process.env,
+    });
+  } catch (err) {
+    console.error(`Failed to spawn ${cmd}:`, err.message);
+    throw err;
+  }
+
+  const defaultName = isLocal
+    ? (process.platform === 'win32' ? `PowerShell ${id}` : `Shell ${id}`)
+    : target;
+  const sessionName = name || defaultName;
 
   // 按日期建子目录，保存终端输出日志
   const today = new Date().toISOString().slice(0, 10); // 2026-04-02
@@ -210,7 +263,13 @@ wss.on('connection', (ws) => {
     switch (msg.type) {
       // 创建新终端
       case 'create': {
-        const session = createSession(msg.name);
+        let session;
+        try {
+          session = createSession(msg.name, msg.target);
+        } catch (err) {
+          ws.send(JSON.stringify({ type: 'error', message: `Failed to create session: ${err.message}` }));
+          break;
+        }
         ws.send(JSON.stringify({
           type: 'created',
           sessionId: session.id,

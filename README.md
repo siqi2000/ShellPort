@@ -31,6 +31,7 @@ Web-based terminal sharing tool. Run a terminal on your home computer, then acce
 
 - **Multi-device access** — open the same terminal session from multiple devices simultaneously
 - **Session management** — create, switch, rename, and close multiple terminal tabs
+- **Multi-target sessions** — each new tab can be a local shell **or an SSH connection** to any host from your `~/.ssh/config` (auto-discovered, zero extra configuration)
 - **Scrollback replay** — new clients joining an existing session see the full output history
 - **Real-time sync** — session list updates are broadcast to all connected clients instantly
 - **Password login** — cookie-based auth, password configured via `.env`
@@ -181,6 +182,7 @@ ISC
 
 - **多设备访问** —— 多个设备可以同时打开并操控同一个终端会话
 - **会话管理** —— 创建、切换、重命名、关闭多个终端标签页
+- **多目标会话** —— 每个新 tab 可以是本地 shell，**也可以是任意一台服务器的 SSH 连接**，目标列表从 `~/.ssh/config` 自动读取，新增服务器零配置
 - **历史回放** —— 新设备加入已有会话时自动回放之前的输出内容
 - **实时同步** —— 会话列表变更会即时推送给所有已连接的客户端
 - **密码登录** —— 基于 cookie 的认证，密码通过 `.env` 配置
