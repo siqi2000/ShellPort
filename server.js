@@ -150,10 +150,16 @@ app.get('/login', (req, res) => {
   const err = req.query.err ? '<div class="err">答案不正确</div>' : '';
   let fields;
   if (authMode === 'questions') {
-    fields = authQuestions.map((qa, i) => `
-      <label>${escapeHtml(qa.q)}</label>
-      <input type="password" name="a${i + 1}" autocomplete="off"${i === 0 ? ' autofocus' : ''}>
-    `).join('');
+    // 问题里包含"密码/password"的才用 type=password,其他用 type=text
+    // 因为 password 输入框在很多浏览器/手机上会禁用输入法,中文/日文等打不进去
+    fields = authQuestions.map((qa, i) => {
+      const isPwd = /密码|password|passwd|pwd/i.test(qa.q);
+      const type = isPwd ? 'password' : 'text';
+      return `
+        <label>${escapeHtml(qa.q)}</label>
+        <input type="${type}" name="a${i + 1}" autocomplete="off" autocapitalize="off" spellcheck="false"${i === 0 ? ' autofocus' : ''}>
+      `;
+    }).join('');
   } else {
     fields = '<input type="password" name="password" placeholder="Password" autofocus>';
   }
