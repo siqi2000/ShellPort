@@ -9,6 +9,7 @@
 </p>
 
 <p align="center">
+  <a href="https://github.com/siqi2000/ShellPort/releases/latest"><img src="https://img.shields.io/github/v/release/siqi2000/ShellPort?color=58a6ff&logo=github" alt="release"></a>
   <img src="https://img.shields.io/badge/node-%3E%3D18-brightgreen?logo=node.js&logoColor=white" alt="node">
   <img src="https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-blue" alt="platform">
   <img src="https://img.shields.io/badge/license-ISC-lightgrey" alt="license">
@@ -168,6 +169,13 @@ The server spawns a PTY process (PowerShell on Windows, bash on Linux/macOS) for
 
 For remote access, `ssh -R 0.0.0.0:8080:localhost:3000 relay` tells the relay's sshd to listen on its own port 8080 and tunnel every byte over the existing SSH connection back to `localhost:3000` on the home machine. No new daemon, no extra software on the relay — just OpenSSH.
 
+### Releases & changelog
+
+See [GitHub Releases](https://github.com/siqi2000/ShellPort/releases) for the full version history. Highlights:
+
+- **[v1.2.0](https://github.com/siqi2000/ShellPort/releases/tag/v1.2.0)** — Multi-target sessions: each tab can be a local shell or an SSH connection to any host from `~/.ssh/config`
+- **[v1.1.0](https://github.com/siqi2000/ShellPort/releases/tag/v1.1.0)** — Password login + remote access via SSH reverse tunnel through a relay server
+
 ### License
 
 ISC
@@ -320,6 +328,13 @@ tunnel.bat
 服务器为每个终端会话生成一个 PTY 进程（Windows 上为 PowerShell，Linux/macOS 上为 bash）。浏览器通过 WebSocket 连接服务器，使用 xterm.js 渲染终端输出。多个客户端可以连接到同一个会话 —— 任意客户端的键盘输入都会转发到 PTY，输出广播给所有连接者。
 
 至于远程访问部分，`ssh -R 0.0.0.0:8080:localhost:3000 relay` 这条命令告诉中转服务器的 sshd：在它自己的 8080 端口监听，并把每一个收到的字节通过已经建立的 SSH 连接，转发回家里机器的 `localhost:3000`。中转服务器上不需要装任何额外的程序，只要 OpenSSH 就够了。
+
+### 版本历史
+
+完整的版本记录在 [GitHub Releases](https://github.com/siqi2000/ShellPort/releases)。重点版本:
+
+- **[v1.2.0](https://github.com/siqi2000/ShellPort/releases/tag/v1.2.0)** —— 多目标会话:每个 tab 可以是本地 shell,也可以是 `~/.ssh/config` 里任意一台服务器的 SSH 连接
+- **[v1.1.0](https://github.com/siqi2000/ShellPort/releases/tag/v1.1.0)** —— 密码登录 + 通过中转服务器的 SSH 反向隧道远程访问
 
 ### 许可证
 
