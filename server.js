@@ -61,12 +61,43 @@ function checkAuth(formData) {
   return formData.password === PASSWORD;
 }
 
-// 登录 token（内存存储，重启后失效，需要重新登录）
-const validTokens = new Set();
+// 登录 token (HMAC 签名,无状态,服务器重启后依然有效)
+// secret 第一次启动时生成,持久化到 data/.token_secret(gitignored)
+// 删掉这个文件 = 使所有 cookie 失效(强制全部重新登录)
+const TOKEN_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 天
+const dataDir = path.join(__dirname, 'data');
+if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir);
+const secretPath = path.join(dataDir, '.token_secret');
+let TOKEN_SECRET;
+if (fs.existsSync(secretPath)) {
+  TOKEN_SECRET = fs.readFileSync(secretPath, 'utf8').trim();
+} else {
+  TOKEN_SECRET = crypto.randomBytes(32).toString('hex');
+  fs.writeFileSync(secretPath, TOKEN_SECRET, { mode: 0o600 });
+}
+
+function sign(payload) {
+  return crypto.createHmac('sha256', TOKEN_SECRET).update(payload).digest('hex');
+}
 function newToken() {
-  const t = crypto.randomBytes(32).toString('hex');
-  validTokens.add(t);
-  return t;
+  const ts = Date.now().toString();
+  return `${ts}.${sign(ts)}`;
+}
+function isValidToken(token) {
+  if (!token) return false;
+  const dot = token.indexOf('.');
+  if (dot < 0) return false;
+  const ts = token.slice(0, dot);
+  const sig = token.slice(dot + 1);
+  const expected = sign(ts);
+  if (sig.length !== expected.length) return false;
+  // 用 timingSafeEqual 防止时序攻击
+  if (!crypto.timingSafeEqual(Buffer.from(sig, 'hex'), Buffer.from(expected, 'hex'))) {
+    return false;
+  }
+  const tsNum = parseInt(ts, 10);
+  if (!tsNum || Date.now() - tsNum > TOKEN_TTL_MS) return false;
+  return true;
 }
 function getTokenFromCookie(req) {
   const c = req.headers.cookie || '';
@@ -74,8 +105,7 @@ function getTokenFromCookie(req) {
   return m ? m[1] : null;
 }
 function isAuthed(req) {
-  const t = getTokenFromCookie(req);
-  return !!(t && validTokens.has(t));
+  return isValidToken(getTokenFromCookie(req));
 }
 
 // 日志目录
@@ -120,9 +150,7 @@ const server = http.createServer(app);
 const wss = new WebSocket.Server({
   server,
   verifyClient: (info, cb) => {
-    const cookie = info.req.headers.cookie || '';
-    const m = cookie.match(/(?:^|; )shellport_token=([^;]+)/);
-    if (m && validTokens.has(m[1])) cb(true);
+    if (isAuthed(info.req)) cb(true);
     else cb(false, 401, 'Unauthorized');
   },
 });
