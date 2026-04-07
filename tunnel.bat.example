@@ -17,7 +17,7 @@ echo.
 echo  Ctrl+C to stop
 echo.
 
-ssh -N -R 0.0.0.0:%REMOTE_PORT%:localhost:%LOCAL_PORT% %SERVER_ALIAS%
+ssh -N -o ServerAliveInterval=30 -o ServerAliveCountMax=3 -o ExitOnForwardFailure=yes -R 0.0.0.0:%REMOTE_PORT%:localhost:%LOCAL_PORT% %SERVER_ALIAS%
 
 echo.
 echo  Tunnel closed.
