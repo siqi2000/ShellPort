@@ -266,6 +266,24 @@
     }
     .target-item.local .icon { color: var(--success); }
     .target-item.ssh .icon { color: var(--accent); }
+    .target-item .name { flex: 1; }
+    .target-item .status {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--text-dim);
+      flex-shrink: 0;
+    }
+    .target-item .status.ok { background: var(--success); }
+    .target-item .status.fail { background: var(--danger); }
+    .target-item .status.checking {
+      background: var(--text-dim);
+      animation: pulse 1.2s infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 0.4; }
+      50% { opacity: 1; }
+    }
 
     /* 重连提示 */
     .reconnect-banner {
@@ -566,9 +584,11 @@
         const item = document.createElement('div');
         const isLocal = t.id === 'local';
         item.className = 'target-item ' + (isLocal ? 'local' : 'ssh');
+        item.dataset.target = t.id;
         item.innerHTML = `
           <span class="icon">${isLocal ? '>_' : '@'}</span>
-          <span>${escapeHtml(t.name)}</span>
+          <span class="name">${escapeHtml(t.name)}</span>
+          <span class="status ${isLocal ? 'ok' : 'checking'}" title="checking..."></span>
         `;
         item.addEventListener('click', () => {
           closeTargetPicker();
@@ -577,6 +597,21 @@
         picker.appendChild(item);
       }
       overlay.classList.add('show');
+
+      // 异步拉取连接状态,更新指示点
+      fetch('/api/targets/status')
+        .then(r => r.json())
+        .then(statuses => {
+          for (const [id, status] of Object.entries(statuses)) {
+            const dot = picker.querySelector(`.target-item[data-target="${id}"] .status`);
+            if (dot) {
+              dot.classList.remove('checking', 'ok', 'fail');
+              dot.classList.add(status);
+              dot.title = status === 'ok' ? 'reachable' : status === 'fail' ? 'unreachable' : 'unknown';
+            }
+          }
+        })
+        .catch(() => {});
     }
     function closeTargetPicker() {
       document.getElementById('targetPickerOverlay').classList.remove('show');

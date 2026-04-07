@@ -6,6 +6,7 @@ const os = require('os');
 const path = require('path');
 const fs = require('fs');
 const crypto = require('crypto');
+const { spawn } = require('child_process');
 
 // 加载 .env
 const envPath = path.join(__dirname, '.env');
@@ -16,14 +17,47 @@ if (fs.existsSync(envPath)) {
   }
 }
 
+// 认证配置：支持两种模式
+//   1) 多问题验证：SHELLPORT_Q1/A1, Q2/A2, ... 全部答对才放行
+//   2) 单密码：SHELLPORT_PASSWORD（向后兼容）
+const authQuestions = [];
+for (let i = 1; i <= 10; i++) {
+  const q = process.env[`SHELLPORT_Q${i}`];
+  const a = process.env[`SHELLPORT_A${i}`];
+  if (q && a) authQuestions.push({ q, a });
+}
 const PASSWORD = process.env.SHELLPORT_PASSWORD;
-if (!PASSWORD) {
+const authMode = authQuestions.length > 0 ? 'questions' : (PASSWORD ? 'password' : null);
+
+if (!authMode) {
   console.error('');
-  console.error('  ERROR: 没找到密码配置');
-  console.error('  请在项目根目录创建 .env 文件，内容例如:');
+  console.error('  ERROR: 没找到认证配置');
+  console.error('  请在项目根目录创建 .env 文件,二选一:');
+  console.error('');
+  console.error('  方式 A — 多问题验证:');
+  console.error('    SHELLPORT_Q1=妈妈的名字');
+  console.error('    SHELLPORT_A1=xxx');
+  console.error('    SHELLPORT_Q2=男朋友的名字');
+  console.error('    SHELLPORT_A2=xxx');
+  console.error('    SHELLPORT_Q3=密码');
+  console.error('    SHELLPORT_A3=xxx');
+  console.error('');
+  console.error('  方式 B — 单密码:');
   console.error('    SHELLPORT_PASSWORD=你的密码');
   console.error('');
   process.exit(1);
+}
+
+function normalizeAnswer(s) {
+  return (s || '').trim().toLowerCase();
+}
+function checkAuth(formData) {
+  if (authMode === 'questions') {
+    return authQuestions.every((qa, i) =>
+      normalizeAnswer(formData[`a${i + 1}`]) === normalizeAnswer(qa.a)
+    );
+  }
+  return formData.password === PASSWORD;
 }
 
 // 登录 token（内存存储，重启后失效，需要重新登录）
@@ -91,23 +125,41 @@ app.use((req, res, next) => {
 // 登录页 + 处理
 app.use(express.urlencoded({ extended: false }));
 
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+  }[c]));
+}
+
 app.get('/login', (req, res) => {
-  const err = req.query.err ? '<div class="err">密码错误</div>' : '';
+  const err = req.query.err ? '<div class="err">答案不正确</div>' : '';
+  let fields;
+  if (authMode === 'questions') {
+    fields = authQuestions.map((qa, i) => `
+      <label>${escapeHtml(qa.q)}</label>
+      <input type="password" name="a${i + 1}" autocomplete="off"${i === 0 ? ' autofocus' : ''}>
+    `).join('');
+  } else {
+    fields = '<input type="password" name="password" placeholder="Password" autofocus>';
+  }
   res.send(`<!doctype html><html><head><meta charset="utf-8"><title>ShellPort Login</title>
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <style>body{background:#0d1117;color:#e6edf3;font-family:-apple-system,Segoe UI,sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0}
-form{background:#161b22;padding:32px;border-radius:8px;border:1px solid #30363d;min-width:260px}
-h1{color:#58a6ff;margin:0 0 16px;font-size:18px}
-input{display:block;width:100%;padding:10px;background:#0d1117;border:1px solid #30363d;color:#e6edf3;border-radius:4px;margin-bottom:12px;font-size:14px;box-sizing:border-box}
-button{width:100%;padding:10px;background:#58a6ff;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:14px}
+form{background:#161b22;padding:32px;border-radius:8px;border:1px solid #30363d;min-width:280px;max-width:360px}
+h1{color:#58a6ff;margin:0 0 20px;font-size:18px}
+label{display:block;font-size:12px;color:#8b949e;margin-bottom:6px;margin-top:12px}
+label:first-of-type{margin-top:0}
+input{display:block;width:100%;padding:10px;background:#0d1117;border:1px solid #30363d;color:#e6edf3;border-radius:4px;font-size:14px;box-sizing:border-box}
+input:focus{outline:none;border-color:#58a6ff}
+button{width:100%;margin-top:18px;padding:10px;background:#58a6ff;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:14px}
+button:hover{opacity:.85}
 .err{color:#f85149;font-size:12px;margin-bottom:8px}</style></head>
-<body><form method="POST" action="/login"><h1>ShellPort</h1>${err}
-<input type="password" name="password" placeholder="Password" autofocus>
+<body><form method="POST" action="/login"><h1>ShellPort</h1>${err}${fields}
 <button>Sign in</button></form></body></html>`);
 });
 
 app.post('/login', (req, res) => {
-  if (req.body && req.body.password === PASSWORD) {
+  if (req.body && checkAuth(req.body)) {
     const t = newToken();
     res.setHeader('Set-Cookie',
       `shellport_token=${t}; HttpOnly; Path=/; Max-Age=2592000; SameSite=Lax`);
@@ -148,6 +200,56 @@ app.get('/api/targets', (req, res) => {
     list.push({ id: t, name: t });
   }
   res.json(list);
+});
+
+// 检查单个 SSH 目标是否可达(BatchMode + 短超时)
+function checkSshTarget(target) {
+  return new Promise((resolve) => {
+    const sshCmd = process.platform === 'win32'
+      ? path.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'OpenSSH', 'ssh.exe')
+      : 'ssh';
+    const args = [
+      '-o', 'BatchMode=yes',
+      '-o', 'ConnectTimeout=3',
+      '-o', 'StrictHostKeyChecking=accept-new',
+      '-o', 'LogLevel=ERROR',
+      target,
+      'exit',
+    ];
+    let done = false;
+    const finish = (status) => { if (!done) { done = true; resolve(status); } };
+    let proc;
+    try {
+      proc = spawn(sshCmd, args, { stdio: 'ignore' });
+    } catch {
+      return finish('fail');
+    }
+    proc.on('exit', (code) => finish(code === 0 ? 'ok' : 'fail'));
+    proc.on('error', () => finish('fail'));
+    // 兜底:6 秒还没完就杀掉
+    setTimeout(() => {
+      if (!done) {
+        try { proc.kill(); } catch {}
+        finish('fail');
+      }
+    }, 6000);
+  });
+}
+
+// API: 检查所有 SSH 目标的连接状态(并发,带 10s 缓存)
+let statusCache = { time: 0, data: null };
+app.get('/api/targets/status', async (req, res) => {
+  const now = Date.now();
+  if (statusCache.data && now - statusCache.time < 10_000) {
+    return res.json(statusCache.data);
+  }
+  const targets = listSshTargets();
+  const results = { local: 'ok' };
+  await Promise.all(targets.map(async (t) => {
+    results[t] = await checkSshTarget(t);
+  }));
+  statusCache = { time: Date.now(), data: results };
+  res.json(results);
 });
 
 // 获取本机局域网 IP
