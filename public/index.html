@@ -219,6 +219,84 @@
       transform: translate(-50%, -50%) scale(1);
     }
 
+    /* 帮助按钮 */
+    .help-btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 22px;
+      height: 22px;
+      margin-right: 10px;
+      border-radius: 50%;
+      border: 1px solid var(--border);
+      background: transparent;
+      color: var(--text-dim);
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      vertical-align: middle;
+    }
+    .help-btn:hover { color: var(--accent); border-color: var(--accent); }
+
+    /* 帮助弹窗 */
+    .help-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.6);
+      z-index: 160;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+    .help-overlay.show { display: flex; }
+    .help-panel {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      max-width: 720px;
+      width: 100%;
+      max-height: 85vh;
+      display: flex;
+      flex-direction: column;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+    }
+    .help-panel .head {
+      padding: 14px 18px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .help-panel .head h2 {
+      margin: 0;
+      font-size: 14px;
+      color: var(--accent);
+      font-weight: 600;
+    }
+    .help-panel .head .close {
+      background: none;
+      border: none;
+      color: var(--text-dim);
+      font-size: 22px;
+      cursor: pointer;
+      line-height: 1;
+      padding: 0 4px;
+    }
+    .help-panel .head .close:hover { color: var(--danger); }
+    .help-panel pre {
+      flex: 1;
+      overflow: auto;
+      margin: 0;
+      padding: 16px 18px;
+      font-family: 'Cascadia Code','Consolas','Courier New',monospace;
+      font-size: 13px;
+      line-height: 1.55;
+      color: var(--text);
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+
     /* 目标选择器 */
     .target-picker-overlay {
       display: none;
@@ -307,8 +385,20 @@
   <div class="header">
     <h1>ShellPort <span style="font-size:12px;color:var(--text-dim);font-weight:normal;margin-left:8px;">Alt+C copy | Alt+V paste</span></h1>
     <div class="status">
+      <button class="help-btn" id="helpBtn" title="Help">?</button>
       <span class="dot disconnected" id="statusDot"></span>
       <span id="statusText">connecting...</span>
+    </div>
+  </div>
+
+  <!-- 帮助文档弹窗 -->
+  <div class="help-overlay" id="helpOverlay">
+    <div class="help-panel">
+      <div class="head">
+        <h2>Help</h2>
+        <button class="close" id="helpClose" title="Close">&times;</button>
+      </div>
+      <pre id="helpContent">loading...</pre>
     </div>
   </div>
 
@@ -705,6 +795,30 @@
 
     // --- Add Tab 按钮 ---
     document.getElementById('addTab').addEventListener('click', createNewSession);
+
+    // --- 帮助弹窗 ---
+    let helpLoaded = false;
+    document.getElementById('helpBtn').addEventListener('click', async () => {
+      const overlay = document.getElementById('helpOverlay');
+      overlay.classList.add('show');
+      if (!helpLoaded) {
+        try {
+          const text = await fetch('/api/help').then(r => r.text());
+          document.getElementById('helpContent').textContent = text;
+          helpLoaded = true;
+        } catch (e) {
+          document.getElementById('helpContent').textContent = 'Failed to load help.';
+        }
+      }
+    });
+    document.getElementById('helpClose').addEventListener('click', () => {
+      document.getElementById('helpOverlay').classList.remove('show');
+    });
+    document.getElementById('helpOverlay').addEventListener('click', (e) => {
+      if (e.target.id === 'helpOverlay') {
+        document.getElementById('helpOverlay').classList.remove('show');
+      }
+    });
 
     // --- 窗口 resize ---
     window.addEventListener('resize', () => {

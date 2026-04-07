@@ -272,6 +272,25 @@ function checkSshTarget(target) {
   });
 }
 
+// API: 帮助文档(从项目根的 help.md 读取,允许部署方写自定义提示)
+app.get('/api/help', (req, res) => {
+  for (const name of ['help.md', 'help.txt', 'HELP.md']) {
+    const p = path.join(__dirname, name);
+    if (fs.existsSync(p)) {
+      res.type('text/plain; charset=utf-8').send(fs.readFileSync(p, 'utf8'));
+      return;
+    }
+  }
+  // 没有自定义文档时返回一份通用说明
+  res.type('text/plain; charset=utf-8').send(
+    'No help.md configured.\n\n' +
+    'To customize this panel, drop a help.md (or help.txt) into the\n' +
+    'ShellPort project root and refresh. Markdown is rendered as plain\n' +
+    'text in a monospace block, so any formatting you can express with\n' +
+    'whitespace + ASCII will work.\n'
+  );
+});
+
 // API: 检查所有目标的连接状态(并发,带 10s 缓存)
 let statusCache = { time: 0, data: null };
 app.get('/api/targets/status', async (req, res) => {

@@ -1,0 +1,17 @@
+  ShellPort — Help
+  ================
+
+  Drop your own help.md (or help.txt) in the project root and it
+  shows up in this panel. Useful for things you'd otherwise forget,
+  like which .bat to double-click before leaving the house.
+
+  Recommended sections:
+
+    1. URL + login          — what to type, what to expect
+    2. The targets          — what each one is for
+    3. Enable / disable     — which scripts to run, which to close
+    4. Troubleshooting      — common red dots and how to fix them
+
+  This file is gitignored when named "help.md", so it's safe to
+  put internal IPs / aliases / personal hints in it. Only the
+  *.example template is committed.
