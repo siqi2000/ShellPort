@@ -1,5 +1,6 @@
 const express = require('express');
 const http = require('http');
+const net = require('net');
 const WebSocket = require('ws');
 const pty = require('node-pty');
 const os = require('os');
@@ -80,6 +81,20 @@ function isAuthed(req) {
 // 日志目录
 const logsDir = path.join(__dirname, 'logs');
 if (!fs.existsSync(logsDir)) fs.mkdirSync(logsDir);
+
+// 解析 SHELLPORT_TCP_TARGETS,格式: name1:host:port,name2:host:port
+// 这些目标连到一个监听 TCP 的"shell bridge"(home_bridge.js),用于
+// 暴露不能跑 sshd 的机器的 shell
+function listTcpTargets() {
+  const raw = process.env.SHELLPORT_TCP_TARGETS;
+  if (!raw) return [];
+  const out = [];
+  for (const part of raw.split(',')) {
+    const m = part.trim().match(/^([^:]+):([^:]+):(\d+)$/);
+    if (m) out.push({ id: m[1], host: m[2], port: parseInt(m[3], 10) });
+  }
+  return out;
+}
 
 // 解析 ~/.ssh/config,返回 Host 别名列表(跳过通配符)
 function listSshTargets() {
@@ -192,15 +207,30 @@ app.get('/api/sessions', (req, res) => {
   res.json(list);
 });
 
-// API: 获取可用的会话目标(本地 + ~/.ssh/config 里的所有 Host)
+// API: 获取可用的会话目标(本地 + ~/.ssh/config 里的所有 Host + TCP 目标)
 app.get('/api/targets', (req, res) => {
   const localName = process.platform === 'win32' ? 'Local PowerShell' : 'Local Shell';
   const list = [{ id: 'local', name: localName }];
   for (const t of listSshTargets()) {
     list.push({ id: t, name: t });
   }
+  for (const t of listTcpTargets()) {
+    list.push({ id: t.id, name: t.id });
+  }
   res.json(list);
 });
+
+// 检查单个 TCP 目标是否可达(简单 connect 测试)
+function checkTcpTarget(host, port) {
+  return new Promise((resolve) => {
+    const sock = net.connect(port, host);
+    let done = false;
+    const finish = (status) => { if (!done) { done = true; try { sock.destroy(); } catch {} resolve(status); } };
+    sock.once('connect', () => finish('ok'));
+    sock.once('error', () => finish('fail'));
+    setTimeout(() => finish('fail'), 3000);
+  });
+}
 
 // 检查单个 SSH 目标是否可达(BatchMode + 短超时)
 function checkSshTarget(target) {
@@ -236,18 +266,20 @@ function checkSshTarget(target) {
   });
 }
 
-// API: 检查所有 SSH 目标的连接状态(并发,带 10s 缓存)
+// API: 检查所有目标的连接状态(并发,带 10s 缓存)
 let statusCache = { time: 0, data: null };
 app.get('/api/targets/status', async (req, res) => {
   const now = Date.now();
   if (statusCache.data && now - statusCache.time < 10_000) {
     return res.json(statusCache.data);
   }
-  const targets = listSshTargets();
+  const sshTargets = listSshTargets();
+  const tcpTargets = listTcpTargets();
   const results = { local: 'ok' };
-  await Promise.all(targets.map(async (t) => {
-    results[t] = await checkSshTarget(t);
-  }));
+  await Promise.all([
+    ...sshTargets.map(async (t) => { results[t] = await checkSshTarget(t); }),
+    ...tcpTargets.map(async (t) => { results[t.id] = await checkTcpTarget(t.host, t.port); }),
+  ]);
   statusCache = { time: Date.now(), data: results };
   res.json(results);
 });
@@ -265,36 +297,72 @@ function getLocalIP() {
   return '127.0.0.1';
 }
 
+// 把一个 TCP socket 包装成 pty 兼容的接口,这样后续 session 代码不用区分
+function tcpAsPty(host, port) {
+  const sock = net.connect(port, host);
+  const dataCbs = [];
+  const exitCbs = [];
+  let exited = false;
+
+  sock.on('data', (buf) => {
+    const s = buf.toString('utf8');
+    for (const cb of dataCbs) cb(s);
+  });
+  const handleEnd = () => {
+    if (exited) return;
+    exited = true;
+    for (const cb of exitCbs) cb({ exitCode: 0 });
+  };
+  sock.on('close', handleEnd);
+  sock.on('error', (err) => {
+    // 把错误以可读文本送给客户端再关掉
+    const msg = `\r\n[bridge] connection error: ${err.message}\r\n`;
+    for (const cb of dataCbs) cb(msg);
+    handleEnd();
+  });
+
+  return {
+    write: (data) => { try { sock.write(data); } catch {} },
+    resize: (cols, rows) => {
+      // 通过自定义控制序列把 resize 通知给 bridge(后者会调 pty.resize)
+      try { sock.write(`\x1b]9999;resize;${cols};${rows}\x07`); } catch {}
+    },
+    kill: () => { try { sock.destroy(); } catch {} },
+    onData: (cb) => dataCbs.push(cb),
+    onExit: (cb) => exitCbs.push(cb),
+  };
+}
+
 // 创建新的终端 session
-// target: 'local'(默认) 或 ~/.ssh/config 里的 Host 别名
+// target: 'local'(默认) | SSH 别名 | TCP 目标 id
 function createSession(name, target) {
   const id = nextSessionId++;
   const isLocal = !target || target === 'local';
-
-  let cmd, args;
-  if (isLocal) {
-    cmd = process.platform === 'win32' ? 'powershell.exe' : 'bash';
-    args = [];
-  } else {
-    // ssh 别名,直接用 ~/.ssh/config 里的配置
-    cmd = process.platform === 'win32'
-      ? path.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'OpenSSH', 'ssh.exe')
-      : 'ssh';
-    // -tt 强制分配伪终端,避免远端不开 PTY 导致输入不响应
-    args = ['-tt', target];
-  }
+  const tcpTarget = !isLocal ? listTcpTargets().find(t => t.id === target) : null;
+  const isTcp = !!tcpTarget;
+  const isSsh = !isLocal && !isTcp;
 
   let ptyProcess;
   try {
-    ptyProcess = pty.spawn(cmd, args, {
-      name: 'xterm-color',
-      cols: 80,
-      rows: 24,
-      cwd: os.homedir(),
-      env: process.env,
-    });
+    if (isTcp) {
+      ptyProcess = tcpAsPty(tcpTarget.host, tcpTarget.port);
+    } else {
+      const cmd = isLocal
+        ? (process.platform === 'win32' ? 'powershell.exe' : 'bash')
+        : (process.platform === 'win32'
+            ? path.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'OpenSSH', 'ssh.exe')
+            : 'ssh');
+      const args = isLocal ? [] : ['-tt', target];
+      ptyProcess = pty.spawn(cmd, args, {
+        name: 'xterm-color',
+        cols: 80,
+        rows: 24,
+        cwd: os.homedir(),
+        env: process.env,
+      });
+    }
   } catch (err) {
-    console.error(`Failed to spawn ${cmd}:`, err.message);
+    console.error(`Failed to start session for ${target || 'local'}:`, err.message);
     throw err;
   }
 

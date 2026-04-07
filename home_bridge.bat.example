@@ -1,0 +1,38 @@
+@echo off
+REM home_bridge.bat — 一键开启"家里电脑作为远程目标"
+REM
+REM 这个脚本做两件事:
+REM   1) 启动 home_bridge.js,在 127.0.0.1:9999 暴露一个 powershell 桥
+REM   2) 用 SSH 反向隧道把 localhost:9999 暴露到中转服务器的 localhost:2222
+REM
+REM 关掉这个窗口或按 Ctrl+C 即同时关闭 bridge 和 tunnel,
+REM 远程的 ShellPort 选择器里 homepc 立刻变红色不可达。
+
+REM ====== 改成你自己的 SSH 别名 + 端口 ======
+set RELAY_ALIAS=myrelay
+set REMOTE_PORT=2222
+set LOCAL_PORT=9999
+REM ===========================================
+
+cd /d "%~dp0"
+
+echo.
+echo  ShellPort home bridge
+echo  ---------------------
+echo  Local bridge:  127.0.0.1:%LOCAL_PORT%
+echo  Remote port:   %RELAY_ALIAS%:%REMOTE_PORT% (only reachable from the relay itself)
+echo.
+echo  Ctrl+C to stop everything
+echo.
+
+REM 后台启动 bridge,前台跑 ssh,关 ssh 之后再 kill 掉 bridge
+start "shellport-bridge" /b cmd /c "node home_bridge.js"
+
+ssh -N -o ServerAliveInterval=30 -o ServerAliveCountMax=3 -o ExitOnForwardFailure=yes -R %REMOTE_PORT%:127.0.0.1:%LOCAL_PORT% %RELAY_ALIAS%
+
+REM ssh 退出后,顺便把 bridge 也杀掉
+for /f "tokens=5" %%a in ('netstat -ano ^| findstr "127.0.0.1:%LOCAL_PORT% .*LISTENING"') do taskkill /F /PID %%a >nul 2>&1
+
+echo.
+echo  Bridge closed.
+pause

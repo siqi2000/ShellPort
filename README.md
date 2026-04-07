@@ -43,7 +43,8 @@ Web-based terminal sharing tool. Run a terminal on your home computer, then acce
 
 - **Multi-device access** — open the same terminal session from multiple devices simultaneously
 - **Session management** — create, switch, rename, and close multiple terminal tabs
-- **Multi-target sessions** — each new tab can be a local shell **or an SSH connection** to any host from your `~/.ssh/config` (auto-discovered, zero extra configuration)
+- **Multi-target sessions** — each new tab can be a local shell, an **SSH connection** to any host from your `~/.ssh/config` (auto-discovered, zero extra configuration), or a **TCP bridge** target (lets you reach a Windows machine that has no SSH server, via a tiny `home_bridge.js` + reverse tunnel)
+- **Live target reachability** — the picker pings every target in parallel and shows a green/red dot, so you know which servers are up before you click
 - **Scrollback replay** — new clients joining an existing session see the full output history
 - **Real-time sync** — session list updates are broadcast to all connected clients instantly
 - **Password login** — cookie-based auth, password configured via `.env`
@@ -184,6 +185,7 @@ For remote access, `ssh -R 0.0.0.0:8080:localhost:3000 relay` tells the relay's 
 
 See [GitHub Releases](https://github.com/siqi2000/ShellPort/releases) for the full version history. Highlights:
 
+- **[v1.3.0](https://github.com/siqi2000/ShellPort/releases/tag/v1.3.0)** — Multi-question login, live target reachability indicators, and TCP bridge targets (reach a Windows machine without OpenSSH server)
 - **[v1.2.0](https://github.com/siqi2000/ShellPort/releases/tag/v1.2.0)** — Multi-target sessions: each tab can be a local shell or an SSH connection to any host from `~/.ssh/config`
 - **[v1.1.0](https://github.com/siqi2000/ShellPort/releases/tag/v1.1.0)** — Password login + remote access via SSH reverse tunnel through a relay server
 
@@ -212,7 +214,8 @@ ISC
 
 - **多设备访问** —— 多个设备可以同时打开并操控同一个终端会话
 - **会话管理** —— 创建、切换、重命名、关闭多个终端标签页
-- **多目标会话** —— 每个新 tab 可以是本地 shell，**也可以是任意一台服务器的 SSH 连接**，目标列表从 `~/.ssh/config` 自动读取，新增服务器零配置
+- **多目标会话** —— 每个新 tab 可以是本地 shell、任意一台服务器的 **SSH 连接**(从 `~/.ssh/config` 自动读取，新增服务器零配置)，或者一个 **TCP 桥接目标**(让没装 SSH 服务端的 Windows 机器也能作为目标，通过一个小小的 `home_bridge.js` + 反向隧道实现)
+- **实时连通性指示** —— 选择器并发探测每个目标的可达性，绿点/红点一目了然，点之前就知道服务器在不在
 - **历史回放** —— 新设备加入已有会话时自动回放之前的输出内容
 - **实时同步** —— 会话列表变更会即时推送给所有已连接的客户端
 - **密码登录** —— 基于 cookie 的认证，密码通过 `.env` 配置
@@ -355,6 +358,7 @@ tunnel.bat
 
 完整的版本记录在 [GitHub Releases](https://github.com/siqi2000/ShellPort/releases)。重点版本:
 
+- **[v1.3.0](https://github.com/siqi2000/ShellPort/releases/tag/v1.3.0)** —— 多问题验证登录、目标实时可达性指示器、TCP 桥接目标(无需在远端机器装 OpenSSH server 也能把它当成目标)
 - **[v1.2.0](https://github.com/siqi2000/ShellPort/releases/tag/v1.2.0)** —— 多目标会话:每个 tab 可以是本地 shell,也可以是 `~/.ssh/config` 里任意一台服务器的 SSH 连接
 - **[v1.1.0](https://github.com/siqi2000/ShellPort/releases/tag/v1.1.0)** —— 密码登录 + 通过中转服务器的 SSH 反向隧道远程访问
 

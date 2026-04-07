@@ -3,3 +3,4 @@ logs/
 .env
 tunnel.bat
 start.bat
+home_bridge.bat
